@@ -1,3 +1,4 @@
+/* groovylint-disable DuplicateStringLiteral */
 /* groovylint-disable-next-line CompileStatic */
 pipeline {
     options {
@@ -7,14 +8,25 @@ pipeline {
     agent {
         node {
             label 'node-initial'
-            customWorkspace './terraform-install'
         }
     }
 
+    tools {
+        git 'Default'
+    }
+
+    parameters {
+        string(
+            name: 'channel',
+            defaultValue: '#jenkins-notification',
+            description: 'What Slack Channel to use for Slack Messages '
+        )
+    }
+
     stages {
-        stage('Terraform Install') {
+        stage('Make Terraform Script Executable') {
             when {
-                expression { BRANCH_NAME == 'main' || BRANCH_NAME == 'deploy' }
+                expression { env.GIT_LOCAL_BRANCH == 'deploy' }
             }
 
             steps {
@@ -23,6 +35,12 @@ pipeline {
                     echo "Making Shell script executable"
                     chmod +x ./terraform.sh
                 '''
+            }
+        }
+
+        stage('Run Terraform Script') {
+            when {
+                expression { env.GIT_LOCAL_BRANCH == 'deploy' }
             }
 
             steps {
@@ -41,36 +59,26 @@ pipeline {
         failure {
             slackSend(
                 color: 'danger',
-                channel: '#jenkins-noification',
-                message: 'Terraform Install Failed.',
+                channel: params.channel,
+                message: 'Terraform Installation Failed.',
             )
         }
 
         success {
             slackSend(
                 color: 'good',
-                /* groovylint-disable-next-line DuplicateStringLiteral */
-                channel: '#jenkins-noification',
-                message: '''
-                    Terraform Install Successful.
-
-                    Terraform Version: `$(terraform version)`
-
-                    Terraform Output:
-                    ```
-                    $(terraform output -json)
-                    ```
-                    Pipeline $PIPELINE_NAME: Terraform Install Successful.
-                ''',
+                channel: params.channel,
+                message: """
+                    Terraform Installation Succeeded `#$BUILD_NUMBER`.
+                """,
             )
         }
 
         always {
             slackSend(
-                /* groovylint-disable-next-line DuplicateStringLiteral */
                 color: 'good',
-                channel: '#jenkins-notification',
-                message: "Pipeline $PIPELINE_NAME is finished"
+                channel: params.channel,
+                message: 'Pipeline is finished'
             )
         }
     }
